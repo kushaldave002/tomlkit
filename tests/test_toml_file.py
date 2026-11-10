@@ -3,6 +3,8 @@ import os
 from collections.abc import Callable
 from pathlib import Path
 
+import pytest
+
 from tomlkit.toml_document import TOMLDocument
 from tomlkit.toml_file import TOMLFile
 
@@ -118,3 +120,40 @@ def test_readwrite_eol_windows(tmp_path: Path) -> None:
     toml_f.write(doc)
     readback = toml_f.read()
     assert doc.as_string() == readback.as_string()
+
+
+@pytest.mark.parametrize("exists", [False, True])
+@pytest.mark.parametrize("bad_text", ["\ud800", "\udfff", "\ud800\udc00"])
+def test_invalid_unicode_does_not_modify_destination(
+    tmp_path: Path, exists: bool, bad_text: str
+) -> None:
+    path = tmp_path / "settings.toml"
+    original = b'important = "keep me"\r\n'
+    if exists:
+        path.write_bytes(original)
+    data = TOMLDocument()
+    data["value"] = bad_text
+
+    with pytest.raises(UnicodeEncodeError):
+        TOMLFile(path).write(data)
+
+    if exists:
+        assert path.read_bytes() == original
+    else:
+        assert not path.exists()
+
+
+@pytest.mark.parametrize("line_ending", ["\n", "\r\n"])
+def test_valid_unicode_keeps_file_line_endings(
+    tmp_path: Path, line_ending: str
+) -> None:
+    path = tmp_path / "settings.toml"
+    original = f'value = "café🙂"{line_ending}'
+    path.write_bytes(original.encode("utf-8"))
+    toml_file = TOMLFile(path)
+    data = toml_file.read()
+    data["value"] = "中文🙂"
+
+    toml_file.write(data)
+
+    assert path.read_bytes() == f'value = "中文🙂"{line_ending}'.encode()

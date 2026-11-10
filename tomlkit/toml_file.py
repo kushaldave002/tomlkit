@@ -55,5 +55,8 @@ class TOMLFile:
         elif self._linesep == "\r\n":
             content = re.sub(r"(?<!\r)\n", "\r\n", content)
 
-        with open(self._path, "w", encoding="utf-8", newline="") as f:
-            f.write(content)
+        # Encode before opening the destination so invalid Unicode cannot
+        # truncate an existing file or leave a new empty file behind.
+        encoded = content.encode("utf-8")
+        with open(self._path, "wb") as f:
+            f.write(encoded)
